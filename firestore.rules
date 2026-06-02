@@ -1,0 +1,41 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isTeacher() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (isSelf(userId) || isTeacher());
+      allow create: if isSignedIn()
+        && isSelf(userId)
+        && request.resource.data.role in ['student', 'teacher']
+        && request.resource.data.name is string
+        && request.resource.data.level is number
+        && request.resource.data.xp is number;
+      allow update: if isSignedIn() && (isSelf(userId) || isTeacher());
+      allow delete: if false;
+    }
+
+    match /systemConfig/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isTeacher();
+    }
+
+    match /chatSessions/{sessionId} {
+      allow read: if isSignedIn() && request.auth.uid == resource.data.studentId;
+      allow create: if isSignedIn() && request.resource.data.studentId == request.auth.uid;
+      allow update: if isSignedIn() && request.auth.uid == resource.data.studentId;
+      allow delete: if false;
+    }
+  }
+}
