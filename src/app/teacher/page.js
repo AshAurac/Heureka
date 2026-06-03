@@ -99,7 +99,16 @@ export default function TeacherPage() {
               <h2 className="text-2xl font-semibold">Students</h2>
               <p className="text-slate-400">Displaying all Firestore users with the student role.</p>
             </div>
-            <p className="text-sm text-slate-500">{loading ? "Loading students..." : `${students.length} students found`}</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.push("/student?teacherView=true")}
+                className="inline-flex items-center justify-center rounded-3xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/20"
+              >
+                Student view
+              </button>
+              <p className="text-sm text-slate-500">{loading ? "Loading students..." : `${students.length} students found`}</p>
+            </div>
           </div>
 
           {error && <p className="mb-4 text-sm text-rose-400">{error}</p>}

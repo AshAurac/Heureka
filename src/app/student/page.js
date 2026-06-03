@@ -16,6 +16,7 @@ const initialMessages = [
 
 export default function StudentPage() {
   const router = useRouter();
+  const [isTeacherView, setIsTeacherView] = useState(false);
   const [messages, setMessages] = useState(initialMessages);
   const [activeSubject, setActiveSubject] = useState("");
   const [activeAssignmentName, setActiveAssignmentName] = useState("");
@@ -31,6 +32,12 @@ export default function StudentPage() {
   }, [messages, loading]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    setIsTeacherView(params.get("teacherView") === "true" || params.get("teacherView") === "1");
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.replace("/");
@@ -38,7 +45,8 @@ export default function StudentPage() {
       }
 
       const userDoc = await getDoc(doc(db, "users", user.uid));
-      if (!userDoc.exists() || userDoc.data().role !== "student") {
+      const role = userDoc.data()?.role;
+      if (!userDoc.exists() || (role !== "student" && !(role === "teacher" && isTeacherView))) {
         router.replace("/");
         return;
       }
@@ -58,7 +66,7 @@ export default function StudentPage() {
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [isTeacherView, router]);
 
   async function handleSend(event) {
     event.preventDefault();
@@ -148,21 +156,86 @@ export default function StudentPage() {
             <h1 className="mt-2 text-3xl font-semibold">Student Chat</h1>
             <p className="mt-2 text-slate-300">Welcome back, {studentProfile?.name || "Student"}.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Link href="/student/profile" className="rounded-3xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-cyan-400 hover:text-cyan-100">Edit profile</Link>
-            <button type="button" onClick={() => signOut(auth).then(() => router.replace("/"))} className="rounded-3xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-rose-400 hover:text-rose-200">Log out</button>
-            <div className="rounded-3xl bg-slate-800 p-4 text-sm">
-              <p className="text-slate-400">Current focus: {selectedSubject || "General"} • {selectedAssignment?.name || "No assignment selected"}</p>
-              <p className="mt-1 text-slate-400">Level {studentProfile?.level || 1} · {studentProfile?.xp || 0} / 100 XP</p>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-700">
+          <div className="ml-auto flex flex-wrap items-center gap-3">
+            {isTeacherView ? (
+              <button
+                type="button"
+                onClick={() => router.push("/teacher")}
+                className="rounded-3xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/20"
+              >
+                Back to teacher mode
+              </button>
+            ) : null}
+            <div className="rounded-3xl bg-slate-800 p-4 text-sm text-center">
+              <p className="text-slate-400">Level {studentProfile?.level || 1} · {studentProfile?.xp || 0} / 100 XP</p>
+              <div className="mt-3 h-2 w-40 overflow-hidden rounded-full bg-slate-700">
                 <div className="h-full w-0 rounded-full bg-cyan-400" />
               </div>
             </div>
+            <Link href="/student/profile" className="rounded-3xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-cyan-400 hover:text-cyan-100">Edit profile</Link>
+            <button type="button" onClick={() => signOut(auth).then(() => router.replace("/"))} className="rounded-3xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-rose-400 hover:text-rose-200">Log out</button>
           </div>
         </div>
       </header>
 
       <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6">
+        <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-slate-950/40">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-sm uppercase tracking-[0.25em] text-cyan-300">Subject & task focus</p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-100">Pick the subject and assignment the coach should use.</h2>
+              <p className="mt-2 text-sm text-slate-400">These controls sit above the chat so you can switch context quickly before asking the coach for help.</p>
+            </div>
+            <div className="rounded-3xl border border-slate-800 bg-slate-950/90 px-4 py-3 text-sm text-slate-300">
+              <p className="font-medium text-slate-100">Current focus</p>
+              <p className="mt-1 text-cyan-100">{selectedSubject || "General"} • {selectedAssignment?.name || "No assignment selected"}</p>
+            </div>
+          </div>
+
+          {subjects.length > 0 && (
+            <div className="mt-5 grid gap-4 rounded-3xl border border-slate-800 bg-slate-950/80 p-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-100">Subjects</p>
+                <p className="text-xs text-slate-400">Choose one subject at a time to keep the coaching context tight.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {subjects.map((subject) => (
+                  <button
+                    key={subject}
+                    type="button"
+                    onClick={() => {
+                      setActiveSubject(subject);
+                      setActiveAssignmentName(studentProfile?.taskEntries?.[subject]?.assignments?.[0]?.name || "");
+                    }}
+                    className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition ${selectedSubject === subject ? "border-cyan-400 bg-cyan-500/10 text-cyan-100" : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500"}`}
+                  >
+                    {subject}
+                  </button>
+                ))}
+              </div>
+
+              {subjectAssignments.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-slate-100">Assignments</p>
+                  <p className="text-xs text-slate-400">Pick the named task for the selected subject.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {subjectAssignments.map((assignment) => (
+                      <button
+                        key={`${selectedSubject}-${assignment.name}`}
+                        type="button"
+                        onClick={() => setActiveAssignmentName(assignment.name)}
+                        className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${activeAssignmentName === assignment.name ? "border-cyan-400 bg-cyan-500/10 text-cyan-100" : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500"}`}
+                      >
+                        {assignment.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+
         <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-slate-950/40">
           <div className="flex h-[60vh] flex-col gap-4 overflow-hidden rounded-3xl bg-slate-950 p-4">
             <div className="flex-1 space-y-4 overflow-y-auto pr-2">
@@ -197,42 +270,9 @@ export default function StudentPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="grid gap-1">
               <label className="text-sm text-slate-400" htmlFor="studentMessage">Send a coaching question or work through a problem.</label>
-              <p className="text-xs text-cyan-200">Active assignment: {selectedSubject || "General"} • {selectedAssignment?.name || "No assignment selected"}</p>
+              <p className="text-xs text-cyan-200">Tone: choose how the coach should respond.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {subjects.length > 0 && (
-                <div className="mr-2 flex flex-col gap-2 rounded-3xl border border-slate-700 bg-slate-950 p-2">
-                  <div className="flex flex-wrap gap-2">
-                    {subjects.map((subject) => (
-                      <button
-                        key={subject}
-                        type="button"
-                        onClick={() => {
-                          setActiveSubject(subject);
-                          setActiveAssignmentName(studentProfile?.taskEntries?.[subject]?.assignments?.[0]?.name || "");
-                        }}
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] transition ${selectedSubject === subject ? "bg-cyan-500/15 text-cyan-100" : "text-slate-300 hover:bg-slate-800"}`}
-                      >
-                        {subject}
-                      </button>
-                    ))}
-                  </div>
-                  {subjectAssignments.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {subjectAssignments.map((assignment) => (
-                        <button
-                          key={`${selectedSubject}-${assignment.name}`}
-                          type="button"
-                          onClick={() => setActiveAssignmentName(assignment.name)}
-                          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] transition ${activeAssignmentName === assignment.name ? "border-cyan-400 bg-cyan-500/10 text-cyan-100" : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500"}`}
-                        >
-                          {assignment.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
               {[
                 { value: "encouraging", label: "Encouraging" },
                 { value: "humourous", label: "Humourous" },

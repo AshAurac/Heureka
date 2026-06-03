@@ -22,6 +22,24 @@ export async function POST(req) {
       "- If context is missing, ask for the smallest necessary detail before coaching further.",
     ].join("\n");
 
+    const trimmedHistory = messageHistory.length > 10
+      ? [
+          ...messageHistory.slice(0, 2),
+          { role: "system", content: "[Earlier messages summarised]" },
+          ...messageHistory.slice(-6),
+        ]
+      : messageHistory;
+
+    const anchoredHistory = trimmedHistory.map((msg, index) => {
+      if (msg.role === "user" && index === trimmedHistory.length - 1) {
+        return {
+          ...msg,
+          content: `[CONTEXT: ${profileContext.yearLevel} student, subject: ${currentTaskContext.subject}. Stay on this year level and subject only.]\n\n${msg.content}`,
+        };
+      }
+      return msg;
+    });
+
     const response = await undiciFetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       dispatcher: new Agent({ connect: { rejectUnauthorized: false } }),
@@ -32,13 +50,19 @@ export async function POST(req) {
         "X-Title": "Socratic App",
       },
       body: JSON.stringify({
-        model: "openrouter/free",
+        model: "meta-llama/llama-3.1-8b-instruct:free",
+        route: "fallback",
+        models: [
+          "meta-llama/llama-3.1-8b-instruct:free",
+          "mistralai/mistral-7b-instruct:free",
+          "google/gemma-2-9b-it:free",
+        ],
         messages: [
           { role: "system", content: systemMessage },
-          ...messageHistory,
+          ...anchoredHistory,
         ],
-        temperature: 0.7,
-        max_tokens: 800,
+        temperature: 0.4,
+        max_tokens: 400,
       }),
     });
 

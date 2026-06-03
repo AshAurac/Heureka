@@ -34,6 +34,7 @@ function normalizeTaskEntries(taskEntries, subjectList, legacyTaskSheet = "", le
 
 export default function StudentProfilePage() {
   const router = useRouter();
+  const [isTeacherView, setIsTeacherView] = useState(false);
   const [profile, setProfile] = useState({
     name: "",
     yearLevel: "",
@@ -47,6 +48,11 @@ export default function StudentProfilePage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setIsTeacherView(params.get("teacherView") === "true" || params.get("teacherView") === "1");
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         router.replace("/");
@@ -54,7 +60,8 @@ export default function StudentProfilePage() {
       }
 
       const userDoc = await getDoc(doc(db, "users", user.uid));
-      if (!userDoc.exists() || userDoc.data().role !== "student") {
+      const role = userDoc.data()?.role;
+      if (!userDoc.exists() || (role !== "student" && !(role === "teacher" && isTeacherView))) {
         router.replace("/");
         return;
       }
@@ -81,7 +88,7 @@ export default function StudentProfilePage() {
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, [isTeacherView, router]);
 
   async function handleSave(event) {
     event.preventDefault();
@@ -153,7 +160,17 @@ export default function StudentProfilePage() {
             <p className="mt-2 text-slate-300">Add your year level, subjects, task sheet, and success criteria to help coaching stay relevant.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Link href="/student" className="rounded-3xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-cyan-400 hover:text-cyan-100">Back to chat</Link>
+            {isTeacherView ? (
+              <button
+                type="button"
+                onClick={() => router.push("/teacher")}
+                className="rounded-3xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/20"
+              >
+                Back to teacher mode
+              </button>
+            ) : (
+              <Link href="/student" className="rounded-3xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-cyan-400 hover:text-cyan-100">Back to chat</Link>
+            )}
             <button type="button" onClick={() => signOut(auth).then(() => router.replace("/"))} className="rounded-3xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-rose-400 hover:text-rose-200">Log out</button>
           </div>
         </div>
