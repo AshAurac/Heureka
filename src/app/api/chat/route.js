@@ -1,12 +1,20 @@
-import { Agent, fetch as undiciFetch } from "undici";
+import { fetch as undiciFetch } from "undici";
 import { SOCRATIC_MASTER_PROMPT } from "../../../lib/prompts";
 
 export async function POST(req) {
   try {
-    const { messageHistory, profileContext, currentTaskContext } = await req.json();
+    const { messageHistory, profileContext, currentTaskContext, coachMode } = await req.json();
+
+    const coachModeInstruction = {
+      encouraging: "You are in ENCOURAGING mode. Be warm, affirming, and supportive. Celebrate effort and progress.",
+      humourous: "You are in HUMOUROUS mode. Be light, playful, and use low-key Gen Z-adjacent humour. Never cringe or overdone.",
+      reflective: "You are in REFLECTIVE mode. Be calm, probing, and help the student think deeply about their own thinking.",
+      gentle: "You are in GENTLE mode. Be soft, reassuring, and patient. Reduce pressure and build confidence.",
+      challenge: "You are in CHALLENGE mode. Be direct, push deeper thinking, and stretch the student beyond their comfort zone.",
+    }[coachMode] || "You are in GENTLE mode. Be soft, reassuring, and patient.";
 
     const systemMessage = [
-      SOCRATIC_MASTER_PROMPT,
+      SOCRATIC_MASTER_PROMPT.replace("{COACH_MODE}", coachModeInstruction),
       "\nStudent Profile:",
       JSON.stringify(profileContext, null, 2),
       "\nCurrent Task Context:",
@@ -42,7 +50,6 @@ export async function POST(req) {
 
     const response = await undiciFetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      dispatcher: new Agent({ connect: { rejectUnauthorized: false } }),
       headers: {
         Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",

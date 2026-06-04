@@ -3,39 +3,19 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { signOut } from "firebase/auth";
+import { setDoc } from "firebase/firestore";
 import { auth, db } from "../../../lib/firebase";
-
-function normalizeTaskEntries(taskEntries, subjectList, legacyTaskSheet = "", legacyCriteria = "") {
-  const normalized = {};
-
-  subjectList.forEach((subject) => {
-    const rawEntry = taskEntries?.[subject] || {};
-    const assignments = Array.isArray(rawEntry.assignments) && rawEntry.assignments.length > 0
-      ? rawEntry.assignments.map((assignment, index) => ({
-          name: String(assignment?.name || `Assignment ${index + 1}`).trim() || `Assignment ${index + 1}`,
-          taskSheet: String(assignment?.taskSheet || ""),
-          criteria: String(assignment?.criteria || ""),
-        }))
-      : [
-          {
-            name: "Assignment 1",
-            taskSheet: String(legacyTaskSheet || rawEntry?.taskSheet || ""),
-            criteria: String(legacyCriteria || rawEntry?.criteria || ""),
-          },
-        ];
-
-    normalized[subject] = { assignments };
-  });
-
-  return normalized;
-}
+import useAuth from "../../../lib/useAuth";
+import { normalizeTaskEntries, parseSubjects } from "../../../lib/profileUtils";
 
 export default function StudentProfilePage() {
   const router = useRouter();
-  const [isTeacherView, setIsTeacherView] = useState(false);
-  const [profile, setProfile] = useState({
+  const { profile: userProfile, loading: authLoading, isTeacherView } = useAuth({
+    allowedRoles: ["student"],
+    allowTeacherView: true,
+  });
+  const [formData, setFormData] = useState({
     name: "",
     yearLevel: "",
     subjects: "",
@@ -47,48 +27,28 @@ export default function StudentProfilePage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
+  // Populate form fields once the user profile loads
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setIsTeacherView(params.get("teacherView") === "true" || params.get("teacherView") === "1");
-    }
+    if (!userProfile) return;
+    const subjectList = Array.isArray(userProfile.subjects)
+      ? userProfile.subjects
+      : String(userProfile.subjects || "")
+          .split("\n")
+          .map((item) => item.trim())
+          .filter(Boolean);
+    const taskEntries = normalizeTaskEntries(userProfile.taskEntries || {}, subjectList, userProfile.taskSheet || "", userProfile.criteria || "");
+    const firstSubject = subjectList[0] || "";
+    const firstAssignment = taskEntries[firstSubject]?.assignments?.[0]?.name || "";
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.replace("/");
-        return;
-      }
-
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      const role = userDoc.data()?.role;
-      if (!userDoc.exists() || (role !== "student" && !(role === "teacher" && isTeacherView))) {
-        router.replace("/");
-        return;
-      }
-
-      const data = userDoc.data();
-      const subjectList = Array.isArray(data.subjects)
-        ? data.subjects
-        : String(data.subjects || "")
-            .split("\n")
-            .map((item) => item.trim())
-            .filter(Boolean);
-      const taskEntries = normalizeTaskEntries(data.taskEntries || {}, subjectList, data.taskSheet || "", data.criteria || "");
-      const firstSubject = subjectList[0] || "";
-      const firstAssignment = taskEntries[firstSubject]?.assignments?.[0]?.name || "";
-
-      setProfile({
-        name: data.name || "",
-        yearLevel: data.yearLevel || "",
-        subjects: subjectList.join("\n"),
-        taskEntries,
-      });
-      setActiveSubject(firstSubject);
-      setActiveAssignmentName(firstAssignment);
+    setFormData({
+      name: userProfile.name || "",
+      yearLevel: userProfile.yearLevel || "",
+      subjects: subjectList.join("\n"),
+      taskEntries,
     });
-
-    return () => unsubscribe();
-  }, [isTeacherView, router]);
+    setActiveSubject(firstSubject);
+    setActiveAssignmentName(firstAssignment);
+  }, [userProfile]);
 
   async function handleSave(event) {
     event.preventDefault();
@@ -100,15 +60,12 @@ export default function StudentProfilePage() {
       const user = auth.currentUser;
       if (!user) throw new Error("You must be logged in to save your profile.");
 
-      const subjectList = profile.subjects
-        .split("\n")
-        .map((item) => item.trim())
-        .filter(Boolean);
+      const subjectList = parseSubjects(formData.subjects);
       const taskEntries = Object.fromEntries(
         subjectList.map((subject) => [
           subject,
           {
-            assignments: (profile.taskEntries?.[subject]?.assignments || [{ name: "Assignment 1", taskSheet: "", criteria: "" }]).map((assignment, index) => ({
+            assignments: (formData.taskEntries?.[subject]?.assignments || [{ name: "Assignment 1", taskSheet: "", criteria: "" }]).map((assignment, index) => ({
               name: String(assignment?.name || `Assignment ${index + 1}`).trim() || `Assignment ${index + 1}`,
               taskSheet: String(assignment?.taskSheet || ""),
               criteria: String(assignment?.criteria || ""),
@@ -124,8 +81,8 @@ export default function StudentProfilePage() {
       await setDoc(
         doc(db, "users", user.uid),
         {
-          name: profile.name.trim(),
-          yearLevel: profile.yearLevel.trim(),
+          name: formData.name.trim(),
+          yearLevel: formData.yearLevel.trim(),
           subjects: subjectList,
           taskEntries,
           taskSheet: selectedAssignment.taskSheet,
@@ -143,11 +100,8 @@ export default function StudentProfilePage() {
     }
   }
 
-  const subjectList = profile.subjects
-    .split("\n")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const currentAssignments = profile.taskEntries?.[activeSubject]?.assignments || [{ name: "Assignment 1", taskSheet: "", criteria: "" }];
+  const subjectList = parseSubjects(formData.subjects);
+  const currentAssignments = formData.taskEntries?.[activeSubject]?.assignments || [{ name: "Assignment 1", taskSheet: "", criteria: "" }];
   const selectedAssignment = currentAssignments.find((assignment) => assignment.name === activeAssignmentName) || currentAssignments[0] || { name: "Assignment 1", taskSheet: "", criteria: "" };
 
   return (
@@ -180,19 +134,19 @@ export default function StudentProfilePage() {
         <form onSubmit={handleSave} className="grid gap-5 rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-slate-950/40">
           <label className="grid gap-2 text-sm text-slate-200">
             Name
-            <input value={profile.name} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value }))} className="rounded-3xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition focus:border-cyan-400" placeholder="Your name" />
+            <input value={formData.name} onChange={(event) => setFormData((current) => ({ ...current, name: event.target.value }))} className="rounded-3xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition focus:border-cyan-400" placeholder="Your name" />
           </label>
 
           <label className="grid gap-2 text-sm text-slate-200">
             Year level
-            <input value={profile.yearLevel} onChange={(event) => setProfile((current) => ({ ...current, yearLevel: event.target.value }))} className="rounded-3xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition focus:border-cyan-400" placeholder="e.g. Year 10" />
+            <input value={formData.yearLevel} onChange={(event) => setFormData((current) => ({ ...current, yearLevel: event.target.value }))} className="rounded-3xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition focus:border-cyan-400" placeholder="e.g. Year 10" />
           </label>
 
           <label className="grid gap-2 text-sm text-slate-200">
             Subjects
             <textarea
               rows="3"
-              value={profile.subjects}
+              value={formData.subjects}
               onChange={(event) => {
                 const nextSubjects = event.target.value;
                 const subjectsList = nextSubjects
@@ -200,7 +154,7 @@ export default function StudentProfilePage() {
                   .map((item) => item.trim())
                   .filter(Boolean);
 
-                setProfile((current) => ({
+                setFormData((current) => ({
                   ...current,
                   subjects: nextSubjects,
                   taskEntries: normalizeTaskEntries(
@@ -210,8 +164,8 @@ export default function StudentProfilePage() {
                 }));
                 setActiveSubject(subjectsList.includes(activeSubject) ? activeSubject : subjectsList[0] || "");
                 setActiveAssignmentName(subjectsList.includes(activeSubject)
-                  ? (profile.taskEntries?.[activeSubject]?.assignments?.[0]?.name || "")
-                  : (subjectsList[0] ? (profile.taskEntries?.[subjectsList[0]]?.assignments?.[0]?.name || "") : ""));
+                  ? (formData.taskEntries?.[activeSubject]?.assignments?.[0]?.name || "")
+                  : (subjectsList[0] ? (formData.taskEntries?.[subjectsList[0]]?.assignments?.[0]?.name || "") : ""));
               }}
               className="rounded-3xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition focus:border-cyan-400"
               placeholder="One subject per line (for example: English, History, Biology)"
@@ -230,7 +184,7 @@ export default function StudentProfilePage() {
                   type="button"
                   onClick={() => {
                     setActiveSubject(subject);
-                    setActiveAssignmentName(profile.taskEntries?.[subject]?.assignments?.[0]?.name || "Assignment 1");
+                    setActiveAssignmentName(formData.taskEntries?.[subject]?.assignments?.[0]?.name || "Assignment 1");
                   }}
                   className={`rounded-full border px-3 py-2 text-sm transition ${activeSubject === subject ? "border-cyan-400 bg-cyan-500/10 text-cyan-100" : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"}`}
                 >
@@ -250,7 +204,7 @@ export default function StudentProfilePage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setProfile((current) => {
+                    setFormData((current) => {
                       const existing = current.taskEntries?.[activeSubject]?.assignments || [];
                       const nextAssignment = { name: `Assignment ${existing.length + 1}`, taskSheet: "", criteria: "" };
                       return {
@@ -291,7 +245,7 @@ export default function StudentProfilePage() {
                     value={selectedAssignment.name}
                     onChange={(event) => {
                       const nextName = event.target.value;
-                      setProfile((current) => ({
+                      setFormData((current) => ({
                         ...current,
                         taskEntries: {
                           ...(current.taskEntries || {}),

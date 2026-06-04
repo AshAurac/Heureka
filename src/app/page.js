@@ -71,6 +71,15 @@ export default function Home() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const uid = userCredential.user.uid;
+
+      // Check if a user document already exists for this UID
+      const existingDoc = await getDoc(doc(db, "users", uid));
+      if (existingDoc.exists()) {
+        setError("An account with this email already exists. Please log in instead.");
+        setLoading(false);
+        return;
+      }
+
       await setDoc(doc(db, "users", uid), {
         name: name.trim(),
         email: email.trim().toLowerCase(),
@@ -79,7 +88,7 @@ export default function Home() {
         xp: role === "teacher" ? 100 : 0,
         motivation: role === "teacher" ? "leadership" : "curious",
         createdAt: new Date().toISOString(),
-      }, { merge: true });
+      });
 
       router.push(role === "teacher" ? "/teacher" : "/student");
     } catch (err) {
@@ -106,7 +115,7 @@ export default function Home() {
           xp: 0,
           motivation: "curious",
           createdAt: new Date().toISOString(),
-        }, { merge: true });
+        });
       }
 
       router.push("/student");

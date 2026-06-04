@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
-import { auth, db } from "../../lib/firebase";
+import { db } from "../../lib/firebase";
+import useAuth from "../../lib/useAuth";
 
 export default function TeacherPage() {
   const router = useRouter();
+  const { loading: authLoading } = useAuth({ allowedRoles: ["teacher"] });
   const [students, setStudents] = useState([]);
+  const [classId, setClassId] = useState("English10");
   const [lessonGoal, setLessonGoal] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -27,30 +29,31 @@ export default function TeacherPage() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.replace("/");
-        return;
-      }
+    if (authLoading) return;
+    loadStudents();
+  }, [authLoading, loadStudents]);
 
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      if (!userDoc.exists() || userDoc.data().role !== "teacher") {
-        router.replace("/");
-        return;
-      }
 
-      await loadStudents();
-    });
+  const loadLessonGoal = useCallback(async (id) => {
+    try {
+      const snap = await getDoc(doc(db, "systemConfig", id));
+      setLessonGoal(snap.exists() ? (snap.data().liveLessonGoal || "") : "");
+    } catch {
+      setLessonGoal("");
+    }
+  }, []);
 
-    return () => unsubscribe();
-  }, [loadStudents, router]);
-
+  useEffect(() => {
+    if (authLoading) return;
+    loadStudents();
+    loadLessonGoal(classId);
+  }, [authLoading, loadStudents, loadLessonGoal, classId]);
 
   async function handleSave(event) {
     event.preventDefault();
     setSaving(true);
     try {
-      await setDoc(doc(db, "systemConfig", "English10"), {
+      await setDoc(doc(db, "systemConfig", classId), {
         liveLessonGoal: lessonGoal,
         updatedAt: new Date().toISOString(),
       });
@@ -67,11 +70,25 @@ export default function TeacherPage() {
         <header className="mb-8 rounded-3xl border border-slate-800 bg-slate-900 p-8 shadow-xl shadow-slate-950/40">
           <p className="text-sm uppercase tracking-[0.3em] text-emerald-300">Teacher Dashboard</p>
           <h1 className="mt-3 text-4xl font-semibold">Student Progress</h1>
-          <p className="mt-2 text-slate-400">Review learners and publish a live lesson goal for English 10.</p>
+          <p className="mt-2 text-slate-400">Review learners and publish a live lesson goal for any class.</p>
         </header>
 
         <section className="mb-10 rounded-3xl border border-slate-800 bg-slate-900 p-6">
           <form onSubmit={handleSave} className="grid gap-4">
+            <label className="text-sm font-medium text-slate-200" htmlFor="classId">
+              Class
+            </label>
+            <input
+              id="classId"
+              value={classId}
+              onChange={(event) => {
+                const next = event.target.value.trim() || "English10";
+                setClassId(next);
+                loadLessonGoal(next);
+              }}
+              className="w-full rounded-3xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none transition focus:border-emerald-400"
+              placeholder="e.g. English 10, Math 9, History 11"
+            />
             <label className="text-sm font-medium text-slate-200" htmlFor="lessonGoal">
               Live Lesson Goal
             </label>

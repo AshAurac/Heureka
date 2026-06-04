@@ -3,20 +3,24 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "../../lib/firebase";
+import { signOut } from "firebase/auth";
+import { auth } from "../../lib/firebase";
+import useAuth from "../../lib/useAuth";
+import { parseSubjects, resolveActiveContext } from "../../lib/profileUtils";
 
 const initialMessages = [
   {
     role: "assistant",
-    content: "Welcome to Socratic Studio. Ask a question or describe the problem you're working on.",
+    content: "Welcome to Heureka Studio. Ask a question or describe the problem you're working on.",
   },
 ];
 
 export default function StudentPage() {
   const router = useRouter();
-  const [isTeacherView, setIsTeacherView] = useState(false);
+  const { profile, loading: authLoading, isTeacherView } = useAuth({
+    allowedRoles: ["student"],
+    allowTeacherView: true,
+  });
   const [messages, setMessages] = useState(initialMessages);
   const [activeSubject, setActiveSubject] = useState("");
   const [activeAssignmentName, setActiveAssignmentName] = useState("");
@@ -24,66 +28,32 @@ export default function StudentPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [coachMode, setCoachMode] = useState("gentle");
-  const [studentProfile, setStudentProfile] = useState(null);
   const endRef = useRef(null);
+
+  // Derive subjects / assignments from profile once it loads
+  useEffect(() => {
+    if (!profile) return;
+    const subjects = Array.isArray(profile.subjects)
+      ? profile.subjects
+      : String(profile.subjects || "")
+          .split("\n")
+          .map((item) => item.trim())
+          .filter(Boolean);
+    const firstSubject = subjects[0] || "";
+    const firstAssignment = profile.taskEntries?.[firstSubject]?.assignments?.[0]?.name || "";
+    setActiveSubject(firstSubject);
+    setActiveAssignmentName(firstAssignment);
+  }, [profile]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    setIsTeacherView(params.get("teacherView") === "true" || params.get("teacherView") === "1");
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.replace("/");
-        return;
-      }
-
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      const role = userDoc.data()?.role;
-      if (!userDoc.exists() || (role !== "student" && !(role === "teacher" && isTeacherView))) {
-        router.replace("/");
-        return;
-      }
-
-      const profileData = userDoc.data();
-      setStudentProfile(profileData);
-      const subjects = Array.isArray(profileData.subjects)
-        ? profileData.subjects
-        : String(profileData.subjects || "")
-            .split("\n")
-            .map((item) => item.trim())
-            .filter(Boolean);
-      const firstSubject = subjects[0] || "";
-      const firstAssignment = profileData.taskEntries?.[firstSubject]?.assignments?.[0]?.name || "";
-      setActiveSubject(firstSubject);
-      setActiveAssignmentName(firstAssignment);
-    });
-
-    return () => unsubscribe();
-  }, [isTeacherView, router]);
-
   async function handleSend(event) {
     event.preventDefault();
     if (!input.trim() || loading) return;
 
-    const subjects = Array.isArray(studentProfile?.subjects)
-      ? studentProfile.subjects
-      : String(studentProfile?.subjects || "")
-          .split("\n")
-          .map((item) => item.trim())
-          .filter(Boolean);
-    const selectedSubject = subjects.includes(activeSubject) ? activeSubject : subjects[0] || "";
-    const subjectAssignments = studentProfile?.taskEntries?.[selectedSubject]?.assignments || [];
-    const selectedAssignment = subjectAssignments.find((assignment) => assignment.name === activeAssignmentName)
-      || subjectAssignments[0]
-      || null;
-    const selectedTask = selectedAssignment || { taskSheet: studentProfile?.taskSheet || "", criteria: studentProfile?.criteria || "" };
+    const { subjects, selectedSubject, subjectAssignments, selectedAssignment, selectedTask } = resolveActiveContext(profile, activeSubject, activeAssignmentName);
 
     const userMessage = { role: "user", content: input.trim() };
     const nextMessages = [...messages, userMessage];
@@ -102,15 +72,15 @@ export default function StudentPage() {
           messageHistory: nextMessages,
           coachMode,
           profileContext: {
-            name: studentProfile?.name || "Student",
+            name: profile?.name || "Student",
             role: "student",
-            yearLevel: studentProfile?.yearLevel || "Unknown",
+            yearLevel: profile?.yearLevel || "Unknown",
             subjects,
-            level: studentProfile?.level || 1,
-            xp: studentProfile?.xp || 0,
-            motivation: studentProfile?.motivation || "curious",
-            taskSheet: selectedTask?.taskSheet || studentProfile?.taskSheet || "",
-            criteria: selectedTask?.criteria || studentProfile?.criteria || "",
+            level: profile?.level || 1,
+            xp: profile?.xp || 0,
+            motivation: profile?.motivation || "curious",
+            taskSheet: selectedTask?.taskSheet || profile?.taskSheet || "",
+            criteria: selectedTask?.criteria || profile?.criteria || "",
           },
           currentTaskContext: {
             subject: selectedSubject || (subjects[0] || "General"),
@@ -134,18 +104,8 @@ export default function StudentPage() {
     }
   }
 
-  const subjects = Array.isArray(studentProfile?.subjects)
-    ? studentProfile.subjects
-    : String(studentProfile?.subjects || "")
-        .split("\n")
-        .map((item) => item.trim())
-        .filter(Boolean);
-  const selectedSubject = subjects.includes(activeSubject) ? activeSubject : subjects[0] || "";
-  const subjectAssignments = studentProfile?.taskEntries?.[selectedSubject]?.assignments || [];
-  const selectedAssignment = subjectAssignments.find((assignment) => assignment.name === activeAssignmentName)
-    || subjectAssignments[0]
-    || null;
-  const selectedTask = selectedAssignment || { taskSheet: studentProfile?.taskSheet || "", criteria: studentProfile?.criteria || "" };
+  const { subjects, selectedSubject, subjectAssignments, selectedAssignment, selectedTask } = resolveActiveContext(profile, activeSubject, activeAssignmentName);
+  const xpPercent = Math.min((profile?.xp || 0) % 100, 100);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -154,7 +114,7 @@ export default function StudentPage() {
           <div>
             <p className="text-sm uppercase tracking-[0.3em] text-cyan-300">Heureka Studio</p>
             <h1 className="mt-2 text-3xl font-semibold">Student Chat</h1>
-            <p className="mt-2 text-slate-300">Welcome back, {studentProfile?.name || "Student"}.</p>
+            <p className="mt-2 text-slate-300">Welcome back, {profile?.name || "Student"}.</p>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-3">
             {isTeacherView ? (
@@ -167,9 +127,12 @@ export default function StudentPage() {
               </button>
             ) : null}
             <div className="rounded-3xl bg-slate-800 p-4 text-sm text-center">
-              <p className="text-slate-400">Level {studentProfile?.level || 1} · {studentProfile?.xp || 0} / 100 XP</p>
+              <p className="text-slate-400">Level {profile?.level || 1} · {profile?.xp || 0} / 100 XP</p>
               <div className="mt-3 h-2 w-40 overflow-hidden rounded-full bg-slate-700">
-                <div className="h-full w-0 rounded-full bg-cyan-400" />
+                <div
+                  className="h-full rounded-full bg-cyan-400 transition-all duration-500"
+                  style={{ width: `${xpPercent}%` }}
+                />
               </div>
             </div>
             <Link href="/student/profile" className="rounded-3xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-cyan-400 hover:text-cyan-100">Edit profile</Link>
@@ -205,7 +168,7 @@ export default function StudentPage() {
                     type="button"
                     onClick={() => {
                       setActiveSubject(subject);
-                      setActiveAssignmentName(studentProfile?.taskEntries?.[subject]?.assignments?.[0]?.name || "");
+                      setActiveAssignmentName(profile?.taskEntries?.[subject]?.assignments?.[0]?.name || "");
                     }}
                     className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition ${selectedSubject === subject ? "border-cyan-400 bg-cyan-500/10 text-cyan-100" : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500"}`}
                   >
