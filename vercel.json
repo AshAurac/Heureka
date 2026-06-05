@@ -1,3 +1,19 @@
 {
-  "version": 2
+  "version": 2,
+  "regions": ["syd1"],
+  "functions": {
+    "src/app/api/chat/route.js": {
+      "maxDuration": 30
+    }
+  },
+  "env": {
+    "NEXT_PUBLIC_FIREBASE_API_KEY": "@firebase-api-key",
+    "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN": "@firebase-auth-domain",
+    "NEXT_PUBLIC_FIREBASE_PROJECT_ID": "@firebase-project-id",
+    "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET": "@firebase-storage-bucket",
+    "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "@firebase-messaging-sender-id",
+    "NEXT_PUBLIC_FIREBASE_APP_ID": "@firebase-app-id",
+    "OPENROUTER_API_KEY": "@openrouter-api-key",
+    "NEXT_PUBLIC_TEACHER_SIGNUP_CODE": "@teacher-signup-code"
+  }
 }

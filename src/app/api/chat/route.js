@@ -1,6 +1,16 @@
 import { fetch as undiciFetch } from "undici";
 import { SOCRATIC_MASTER_PROMPT } from "../../../lib/prompts";
 
+/**
+ * Handle a Socratic coaching chat request.
+ * @param {Request} req
+ * @param {Object} req.body
+ * @param {Array<{role: string, content: string}>} req.body.messageHistory
+ * @param {Object} req.body.profileContext
+ * @param {Object} req.body.currentTaskContext
+ * @param {string} [req.body.coachMode]
+ * @returns {Promise<Response>}
+ */
 export async function POST(req) {
   try {
     const { messageHistory, profileContext, currentTaskContext, coachMode } = await req.json();
