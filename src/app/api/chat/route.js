@@ -67,10 +67,10 @@ export async function POST(req) {
         "X-Title": "Socratic App",
       },
       body: JSON.stringify({
-        model: "meta-llama/llama-3.1-8b-instruct:free",
+        model: "meta-llama/llama-3.2-3b-instruct:free",
         route: "fallback",
         models: [
-          "meta-llama/llama-3.1-8b-instruct:free",
+          "meta-llama/llama-3.2-3b-instruct:free",
           "mistralai/mistral-7b-instruct:free",
           "google/gemma-2-9b-it:free",
         ],

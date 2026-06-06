@@ -11,9 +11,8 @@ import { normalizeTaskEntries, parseSubjects } from "../../../lib/profileUtils";
 
 export default function StudentProfilePage() {
   const router = useRouter();
-  const { profile: userProfile, loading: authLoading, isTeacherView } = useAuth({
+  const { profile: userProfile, loading: authLoading } = useAuth({
     allowedRoles: ["student"],
-    allowTeacherView: true,
   });
   const [formData, setFormData] = useState({
     name: "",
@@ -114,17 +113,7 @@ export default function StudentProfilePage() {
             <p className="mt-2 text-slate-300">Add your year level, subjects, task sheet, and success criteria to help coaching stay relevant.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {isTeacherView ? (
-              <button
-                type="button"
-                onClick={() => router.push("/teacher")}
-                className="rounded-3xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/20"
-              >
-                Back to teacher mode
-              </button>
-            ) : (
-              <Link href="/student" className="rounded-3xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-cyan-400 hover:text-cyan-100">Back to chat</Link>
-            )}
+            <Link href="/student" className="rounded-3xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-cyan-400 hover:text-cyan-100">Back to chat</Link>
             <button type="button" onClick={() => signOut(auth).then(() => router.replace("/"))} className="rounded-3xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:border-rose-400 hover:text-rose-200">Log out</button>
           </div>
         </div>

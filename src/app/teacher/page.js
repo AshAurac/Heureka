@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import useAuth from "../../lib/useAuth";
+import { useTeacherView } from "../../lib/TeacherViewContext";
 
 export default function TeacherPage() {
   const router = useRouter();
   const { loading: authLoading } = useAuth({ allowedRoles: ["teacher"] });
+  const { enableTeacherView } = useTeacherView();
   const [students, setStudents] = useState([]);
   const [classId, setClassId] = useState("English10");
   const [lessonGoal, setLessonGoal] = useState("");
@@ -119,7 +121,10 @@ export default function TeacherPage() {
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => router.push("/student?teacherView=true")}
+                onClick={() => {
+                  enableTeacherView();
+                  router.push("/student");
+                }}
                 className="inline-flex items-center justify-center rounded-3xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/20"
               >
                 Student view

@@ -17,9 +17,8 @@ const initialMessages = [
 
 export default function StudentPage() {
   const router = useRouter();
-  const { profile, loading: authLoading, isTeacherView } = useAuth({
+  const { profile, loading: authLoading } = useAuth({
     allowedRoles: ["student"],
-    allowTeacherView: true,
   });
   const [messages, setMessages] = useState(initialMessages);
   const [activeSubject, setActiveSubject] = useState("");
@@ -117,15 +116,6 @@ export default function StudentPage() {
             <p className="mt-2 text-slate-300">Welcome back, {profile?.name || "Student"}.</p>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-3">
-            {isTeacherView ? (
-              <button
-                type="button"
-                onClick={() => router.push("/teacher")}
-                className="rounded-3xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/20"
-              >
-                Back to teacher mode
-              </button>
-            ) : null}
             <div className="rounded-3xl bg-slate-800 p-4 text-sm text-center">
               <p className="text-slate-400">Level {profile?.level || 1} · {profile?.xp || 0} / 100 XP</p>
               <div className="mt-3 h-2 w-40 overflow-hidden rounded-full bg-slate-700">
